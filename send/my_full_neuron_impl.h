@@ -120,9 +120,6 @@ static bool neuron_impl_do_timestep_update(
     else if(neuron->pop_index == 4) bias = -10;
 
     initial_activation = activ_per_pop[pop];
-    initial_activation_2 = -1;
-    initial_activation_1 = -1;
-
     int exc_weight = neuron->inputs[0];
     printf("exc_weight = %d\n", exc_weight);
     if(exc_weight != 0) {
