@@ -22,7 +22,7 @@ typedef struct neuron_impl_t {
     accum v;
     accum threshold;
     accum activation;
-    accum decode;
+    accum pop_index;
     accum bias;
 } neuron_impl_t;
 
@@ -86,9 +86,9 @@ static int get_activation(index_t neuron_index){
 }
 
 __attribute__((unused)) // Marked unused as only used sometimes
-static uint32_t get_decode(index_t neuron_index){
+static uint32_t get_pop_index(index_t neuron_index){
     neuron_impl_t *neuron = &neuron_array[neuron_index];
-    return neuron->decode;
+    return neuron->pop_index;
 }
 
 int activ_per_pop[6];
@@ -107,21 +107,17 @@ static bool neuron_impl_do_timestep_update(
     // Store the recorded membrane voltage
     neuron_recording_record_accum(V_RECORDING_INDEX, neuron_index, neuron->v);
 
-    int layer = -1;
-    if(neuron->decode == 0 || neuron->decode == 1) layer = 0;
-    if(neuron->decode == 2 || neuron->decode == 3) layer = 1;
-    if(neuron->decode == 4) layer = 2;
-    printf("layer = %d \n\n", layer);
-    int pop = neuron->decode;
+    int layer = (int) neuron->pop_index / 2;    
+    int pop = neuron->pop_index;
 
     if(time == 0) {
         index=0;
         activ_per_pop[pop] = neuron->activation;
     }
     int bias = 0;
-    if(neuron->decode == 2) bias = 5;
-    else if(neuron->decode == 3) bias = 7;
-    else if(neuron->decode == 4) bias = -10;
+    if(neuron->pop_index == 2) bias = 5;
+    else if(neuron->pop_index == 3) bias = 7;
+    else if(neuron->pop_index == 4) bias = -10;
 
     initial_activation = activ_per_pop[pop]; // neuron->activation;
     initial_activation_2 = -1;
@@ -227,7 +223,7 @@ static bool neuron_impl_do_timestep_update(
 
 static uint32_t get_layer(index_t neuron_index) {
     neuron_impl_t *neuron = &neuron_array[neuron_index];
-    uint32_t layer = neuron->decode / 2;
+    uint32_t layer = neuron->pop_index / 2;
     return layer;
 }
 
