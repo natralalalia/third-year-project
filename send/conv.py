@@ -65,7 +65,7 @@ for i in range(0, 2):
 
 for j in range(0, 2):
     proj[1].append(p.Projection(pops[1][j], pops[2][0], p.OneToOneConnector(),
-                                p.StaticSynapse(weight=weights[w])))  # weights[w]
+                                p.StaticSynapse(weight=weights[w], delay=0)))  # weights[w]
     print("The connection between pop[1][{}] and pop[2][0] -> The weight is: {}".format(j, weights[w]))
     w += 1
 
