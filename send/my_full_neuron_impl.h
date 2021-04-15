@@ -105,7 +105,12 @@ static bool neuron_impl_do_timestep_update(
     // Store the recorded membrane voltage
     neuron_recording_record_accum(V_RECORDING_INDEX, neuron_index, neuron->v);
 
-    int layer = (int) neuron->pop_index / 2;    
+    // int layer = (int) neuron->pop_index / 2;   
+    int layer = -1;
+    if(neuron->pop_index == 0 || neuron->pop_index == 1) layer = 0;
+    if(neuron->pop_index == 2 || neuron->pop_index == 3) layer = 1;
+    if(neuron->pop_index == 4) layer = 2;
+    printf("layer = %d \n\n", layer);
     int pop = neuron->pop_index;
 
     if(time == 0) {
