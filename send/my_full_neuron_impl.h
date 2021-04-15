@@ -93,8 +93,6 @@ static uint32_t get_pop_index(index_t neuron_index){
 
 int activ_per_pop[6];
 int initial_activation;
-int initial_activation_1;
-int initial_activation_2;
 uint32_t index;
 int weights[6];
 __attribute__((unused)) // Marked unused as only used sometimes
@@ -114,12 +112,14 @@ static bool neuron_impl_do_timestep_update(
         index=0;
         activ_per_pop[pop] = neuron->activation;
     }
+    
+    // random bias values for testing. TODO: get bias as a parameter
     int bias = 0;
     if(neuron->pop_index == 2) bias = 5;
     else if(neuron->pop_index == 3) bias = 7;
     else if(neuron->pop_index == 4) bias = -10;
 
-    initial_activation = activ_per_pop[pop]; // neuron->activation;
+    initial_activation = activ_per_pop[pop];
     initial_activation_2 = -1;
     initial_activation_1 = -1;
 
@@ -140,17 +140,14 @@ static bool neuron_impl_do_timestep_update(
         index++;
     }
 
-    if(neuron->inputs[0] != 0) {
-        neuron->inputs[0] = 1;
-    }
+    // Set non-zero weights to 1
+    if(neuron->inputs[0] != 0) neuron->inputs[0] = 1;
     if(neuron->inputs[1] != 0) neuron->inputs[1] = 1;
     if(external_bias != 0) external_bias = 1;
 
     if(initial_activation == -1 && ready_to_decode == true) {
-        initial_activation_1 = activation_1;
-        initial_activation_2 = activation_2;
-
-        neuron->activation = initial_activation_1*weights[layer * 2] + initial_activation_2*weights[layer * 2 + 1] + bias;
+        // decoding; store initial activation for encoding
+        neuron->activation = activation_1*weights[layer * 2] + activation_2*weights[layer * 2 + 1] + bias;
         initial_activation = neuron->activation;
         activ_per_pop[pop] = neuron->activation;
 
