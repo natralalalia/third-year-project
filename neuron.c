@@ -144,14 +144,13 @@ void neuron_pause(address_t address) { // EXPORTED
             address, START_OF_GLOBAL_PARAMETERS, n_neurons);
 }
 
-int act;
-int official_activation;
+int decoded_activation = 0;
 int neuron_indexes_spikes[6] = {0};
 int neuron_times_spikes[6] = {0};
 int number_of_spikes = 0;
-int official_activation_2;
-int official_activation_1;
-bool two_spikes = false;
+int decoded_activation_2 = 0;
+int decoded_activation_1 = 0;
+bool ready_to_encode = false;
 int diffs[6] = {0};
 int index_diffs = 0;
 
@@ -163,98 +162,76 @@ void neuron_do_timestep_update(timer_t time, uint timer_count) { // EXPORTED
     // Prepare recording for the next timestep
     neuron_recording_setup_for_next_recording();
 
-    if(time == 0) {
-        official_activation = 0;
-        official_activation_1 = 0;
-        official_activation_2 = 0;
-    }
-
     // update each neuron individually
     for (index_t neuron_index = 0; neuron_index < n_neurons; neuron_index++) {
          // Get external bias from any source of intrinsic plasticity
          input_t external_bias = synapse_dynamics_get_intrinsic_bias(time, neuron_index);
-         printf("NG+++Neuron.c External Bias = %.6f n_neurons = %d \n\n\n", external_bias, n_neurons);
          uint32_t layer = get_layer(neuron_index);
-         printf("Layer = %d\n", layer);
-         printf("Time = %d", time);
-         int diff = contributes_to_decoding(neuron_index, time, initial_activation);
-         bool spike = neuron_impl_do_timestep_update(neuron_index, external_bias, two_spikes, time, official_activation_1, official_activation_2);
+         printf("\nTime = %d Layer = %d Neuron Index = %d\n", time, layer, neuron_index);
+         bool spike = neuron_impl_do_timestep_update(neuron_index, external_bias, ready_to_encode, time, decoded_activation_1, decoded_activation_2);
 
          if(spike) {
             printf("New spike arrived. Layer = %d neuron_index = %d time = %d\n", layer, neuron_index, time);
-            printf("NUMBER OF SPIKES = %d \n", number_of_spikes);
-                if(time > 16 * (layer - 1) + 1 && time < 16 * layer + 1) {
-//
-//                    printf("DIFF = %d which should be subtracted from neuron_times_spikes[%d], right???\n", diff, number_of_spikes);
-//                    diffs[index_diffs] = diff;
-//                    index_diffs++;
-//
-//                    for(int i = 0; i < index_diffs; i++) {
-//                        printf("diff[%d] = %d; ", i, diffs[i]);
-//                    }
-//                    printf('\n');
-
-                    printf("New spikes contributes. Layer = %d neuron_index = %d time = %d\n", layer, neuron_index, time);
+                if(time > 16 * (layer - 1) + 2 && time < 16 * layer + 1) {
+                    printf("New spikes contributes to decoding the activation!");
                     neuron_indexes_spikes[number_of_spikes] = (int) (neuron_index + 1);
                     neuron_times_spikes[number_of_spikes] = (int) (time - 1);
                     number_of_spikes++;
-//                    printf("NUMBER OF SPIKES = %d \n", number_of_spikes);
-//                    for(uint32_t i = 0; i < 7; i++){
-//                        printf("neuron_indexes_spikes[%d] = %d\n", i, neuron_indexes_spikes[i]);
-//                        printf("neuron_times_spikes[%d] = %d\n", i, neuron_times_spikes[i]);
-//                    }
                 } else {
-                    printf("Spike did not contribute.\n");
+                    printf("Spike did not contribute to decoding the activation.\n");
                 }
          }
-         if(layer == 2 && time <= 16) two_spikes = false;
 
-         if(time % 16 == 0 && number_of_spikes != 0 && neuron_index == n_neurons - 1) { // for middle and output layers
+         if(time % 16 == 0 && number_of_spikes != 0 && neuron_index == n_neurons - 1) {
             printf("--------------------SPIKES RECEIVED--------------------------\n");
             for(uint32_t i = 0; i < number_of_spikes; i++){
                 printf("neuron_indexes_spikes[%d] = %d\n", i, neuron_indexes_spikes[i]);
                 printf("neuron_times_spikes[%d] = %d\n", i, neuron_times_spikes[i]);
             }
-            printf("-----------------------DECODED AS------------------------------\n");
+            printf("-----------------------DECODED AS----------------------------\n");
 
             if(number_of_spikes == 1) {
-                official_activation_2 = 0;
+                decoded_activation_2 = 0;
                 // only received one spike; activation is between 0 and 16 or a multiple of 16
-                if(neuron_indexes_spikes[0] == 1) official_activation_1 = 17 - neuron_times_spikes[0]; // A < 16
-                else official_activation_1 = 16*neuron_indexes_spikes[0]; // A % 16 == 0
-                printf("Official activation is %d as only one neuron spiked!\n", official_activation_1);
+                if(neuron_indexes_spikes[0] == 1) decoded_activation_1 = 17 - neuron_times_spikes[0]; // A < 16
+                else decoded_activation_1 = 16*neuron_indexes_spikes[0]; // A % 16 == 0
+                printf("Decoded activation is %d as only one neuron spiked!\n", decoded_activation_1);
             } else {
                 if(number_of_spikes == 2) {
-                    printf("Number of spikes is 2. Something didn't work well. Maybe each of the two activations from the previous layer was a multiple of 16, or less than 16 \n");
-                    official_activation_2 = 0;
-                    official_activation_1 = neuron_indexes_spikes[0]*(17-neuron_times_spikes[0]%16) +
+                    printf("Number of spikes is 2. Something didn't work well.");
+                    decoded_activation_2 = 0;
+                    decoded_activation_1 = neuron_indexes_spikes[0]*(17-neuron_times_spikes[0]%16) +
                                             (17-neuron_times_spikes[1]%16)*neuron_indexes_spikes[1];
                 } else {
                     if(number_of_spikes == 3) {
                         printf("Number of spikes is 3. Something didn't work well. \n");
+                        decoded_activation_2 = neuron_indexes_spikes[1]*(17-neuron_times_spikes[1]%16) +
+                                               (17-neuron_times_spikes[2]%16)*neuron_indexes_spikes[2];
+                        if(neuron_indexes_spikes[0] == 1) decoded_activation_1 = 17 - neuron_times_spikes[0]; // A < 16
+                        else decoded_activation_1 = 16*neuron_indexes_spikes[0];                         // A % 16 == 0
                     }
                     if(number_of_spikes == 4) {
                         printf("Number of spikes is 4 \n");
-                        official_activation_1 = neuron_indexes_spikes[0]*(17-neuron_times_spikes[0]%16) +
+                        decoded_activation_1 = neuron_indexes_spikes[0]*(17-neuron_times_spikes[0]%16) +
                                                 (17-neuron_times_spikes[3]%16)*neuron_indexes_spikes[3];
 
-                        official_activation_2 = (17-neuron_times_spikes[1]%16)*neuron_indexes_spikes[1] +
+                        decoded_activation_2 = (17-neuron_times_spikes[1]%16)*neuron_indexes_spikes[1] +
                                                 (17-neuron_times_spikes[2]%16)*neuron_indexes_spikes[2];
                     }
                 }
             }
 
-            printf("Official Activation 1 = %d \n Official Activation 2 = %d \n", official_activation_1, official_activation_2);
-            printf("Need to decode the activation...\n");
+            printf("Decoded Activation 1 = %d \nDecoded Activation 2 = %d \n", decoded_activation_1, decoded_activation_2);
+            printf("Need to encode the activation...\n");
 
             printf("Reset number of spikes, neuron_times_spikes and neuron_indexes_spikes! \n\n");
-            two_spikes = true;
+            ready_to_encode = true;
             for(uint32_t i = 0; i < number_of_spikes; i++) {
                 neuron_times_spikes[i] = 0;
                 neuron_indexes_spikes[i] = 0;
             }
             number_of_spikes = 0;
-        } else two_spikes = false;
+        } else ready_to_encode = false;
 
         // If the neuron has spiked
         if (spike) {
@@ -266,10 +243,7 @@ void neuron_do_timestep_update(timer_t time, uint timer_count) { // EXPORTED
                 tdma_processing_send_packet(
                     (key | neuron_index), 0, NO_PAYLOAD, timer_count);
             }
-        } else {
-            printf("the neuron %d has been determined to not spike",
-                      neuron_index);
-         }
+        }
     }
     log_debug("time left of the timer after tdma is %d", tc[T1_COUNT]);
 
@@ -285,11 +259,11 @@ void neuron_do_timestep_update(timer_t time, uint timer_count) { // EXPORTED
 }
 
 uint32_t my_activation_1() {
-    return official_activation_1;
+    return decoded_activation_1;
 }
 
 uint32_t my_activation_2() {
-    return official_activation_2;
+    return decoded_activation_2;
 }
 
 void neuron_add_inputs( // EXPORTED

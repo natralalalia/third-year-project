@@ -1,7 +1,9 @@
 import h5py
-import spynnaker8 as p
+import spynnaker8 as sim
 from python_models8.neuron.builds.my_full_neuron import MyFullNeuron
 import numpy as np
+import json
+import math
 
 
 def decode(firing_times):
@@ -12,11 +14,11 @@ def decode(firing_times):
     time2 = 0
     two_spikes = False
     for (idx, val) in enumerate(firing_times):
-        if val != 0 and first == False:
+        if val != 0 and not first:
             neuron1 = idx + 1
             time1 = val
             first = True
-        elif val != 0 and first == True:
+        elif val != 0 and first:
             neuron2 = idx + 1
             time2 = val
             two_spikes = True
@@ -32,152 +34,116 @@ def decode(firing_times):
     return act
 
 
-hf = h5py.File('xor_weights_lr.hdf5', 'r')
-print(hf.keys())
-
-print('------------DENSE Weights------------')
-for v in hf['dense']['dense']['kernel:0']:
-    print(v)
-
-print('-----------dense Bias--------')
-for v in range(0, 16):
-    print(hf['dense']['dense']['bias:0'][v])
-
-print('------------DENSE_1 Weights------------')
-for x in range(1, 16):
-    print(hf['dense_1']['dense_1']['kernel:0'][x])
-
-print('------------DENSE_1 Bias------------')
-for x in range(0, 1):
-    print(hf['dense_1']['dense_1']['bias:0'][x])
-
-p.setup(timestep=0.1)
-
-pops = [[], [], []]
-proj = [[], []]
+pre_trained_ANN = input("Pre-trained ANN parameters (json / h5py):")
 input_values = [20, 30]
 
-# input layer
-for val in range(0, 2):
-    pops[0].append(p.Population(16, MyFullNeuron(activation=input_values[val], decode=val)))
+no_of_layers = 3
+no_of_units_per_layer = [2, 2, 1]
 
-# hidden layer
-for val in range(0, 2):
-    pops[1].append(p.Population(16, MyFullNeuron(decode=val + 2, activation=-1, bias=hf['dense']['dense']['bias:0'][val])))
+weights = []
+with open(pre_trained_ANN, 'r') as weights_file:
+    weights_data = json.load(weights_file)
+    for value in weights_data["layer_1"]:
+        weights.append(value)
+    for value in weights_data["layer_2"]:
+        weights.append(value)
+sim.setup(timestep=0.1)
 
-# output layer
-pops[2].append(p.Population(16, MyFullNeuron(decode=4, activation=-1)))
-weights = [2, 3, 1, 1, 1, 1]
-w = 0
-# set projections
-for i in range(0, 2):
-    for j in range(0, 2):
-        if weights[w] < 0:
-            rt = 'inhibitory'
+populations = [[] for i in range(no_of_layers)]
+projections = [[] for i in range(no_of_layers - 1)]
+
+# set up populations
+pop_index = 0
+for idx, layer in enumerate(no_of_units_per_layer):
+    for i in range(layer):
+        if idx == 0:
+            act = input_values[i]
         else:
-            rt = 'excitatory'
-        proj[0].append(p.Projection(pops[0][i], pops[1][j], p.OneToOneConnector(),
-                                    p.StaticSynapse(weight=weights[w], delay=0), receptor_type=rt))
+            act = -1
+        populations[idx].append(sim.Population(16, MyFullNeuron(decode=pop_index, activation=act)))
+        pop_index += 1
 
-        print("The connection between pop[0][{}] and pop[1][{}] -> The weight is: {}".format(i, j, weights[w]))
-        w += 1
-        # p.StaticSynapse(weight=hf['dense']['dense']['kernel:0'][i][j])))
-        # print("The connection between pop[0][{}] and pop[1][{}] -> The weight is: {}".format(i, j,
-        # hf['dense']['dense']['kernel:0'][i][j]))
+weight_index = 0
 
-for j in range(0, 2):
-    proj[1].append(p.Projection(pops[1][j], pops[2][0], p.OneToOneConnector(),
-                                p.StaticSynapse(weight=weights[w])))  # weights[w]
-    print("The connection between pop[1][{}] and pop[2][0] -> The weight is: {}".format(j, weights[w]))
-    w += 1
+# set up projections
+for layer in range(no_of_layers - 1):
+    for origin in range(no_of_units_per_layer[layer]):
+        for destination in range(no_of_units_per_layer[layer + 1]):
+            if weights[weight_index] < 0:
+                rt = "inhibitory"
+            else:
+                rt = "excitatory"
+            projections[layer].append(sim.Projection(populations[layer][origin],
+                                                     populations[layer + 1][destination], sim.OneToOneConnector(),
+                                                     sim.StaticSynapse(weight=weights[weight_index], delay=0),
+                                                     receptor_type=rt))
+            print("Connection between pop[{}][{}] and pop[{}][{}] of weight {}".format(
+                layer, origin, layer + 1, destination, weights[weight_index]))
+            weight_index += 1
 
-    # p.StaticSynapse(weight=(hf['dense_1']['dense_1']['kernel:0'][j]))))
-    print("The weight is: {}".format(hf['dense_1']['dense_1']['kernel:0'][j]))
+# record spikes
+for layer in populations:
+    for population in layer:
+        population.record(["spikes", "v"])
 
-for po in pops:
-    for pop in po:
-        pop.record(["spikes"])
+runtime = round(1.6 * no_of_layers, 1)
+sim.run(runtime)
 
-for po in pops[0]:
-    po.record(['v'])
-
-for po in pops[1]:
-    po.record(['v'])
-
-for po in pops[2]:
-    po.record(['v'])
-
-p.run(4.8)
-
-end_spikes = [[], [], []]
-for (i, po) in enumerate(pops):
-    for pop in po:
-        a = pop.get_data(["spikes"]).segments[0].spiketrains
-        if True:
-            print("Index = {}".format(i))
-            voltage = pop.get_data('v').segments[0].filter(name='v')[0]
-            print("Voltage = {}".format(voltage))
-        end_spikes[i].append(a)
-
-print("--------------------------------------------------------------------------------------------------")
+end_spikes = [[] for i in range(no_of_layers)]
+for (i, population) in enumerate(populations):
+    for unit in population:
+        end_spikes[i].append(unit.get_data(["spikes"]).segments[0].spiketrains)
 
 actual_spikes = []
-for (index, value) in enumerate(end_spikes):
-    print("LAYER {} ".format(index))
-    for i, spike in enumerate(value):
-        if len(spike) > 0 and index == 2:
-            actual_spikes.append((i, spike))
-        print(spike)
-        print('\n')
-    print('------------------------------------------\n')
+for value in end_spikes[no_of_layers - 1]:
+    for (i, spike) in enumerate(value):
+        actual_spikes.append((i, spike))
 
-print("------------------------------------------------------------------FINAL RESULTS-------------------")
-apz = True
+print("------------FINAL RESULTS-------------------")
+output_spike = True
 decode_params = []
-for value in enumerate(actual_spikes[0][1]):
-    if True:  # index == 1:
-        for (idx, tr) in enumerate(value):
-            print("Index = {} Value = {}".format(idx, tr))
-            if idx == 1 and len(tr) > 0:
-                for t in tr:
-                    if t > 3.2:
-                        decode_params.append(int(t * 10) - 32)
-                        apz = False
-            if idx == 1:
-                if apz:
-                    decode_params.append(0)
-                else:
-                    apz = True
+for value in actual_spikes:
+    for (idx, tr) in enumerate(value):
+        print("Index = {} Value = {}".format(idx, tr))
+        if idx == 1 and len(tr) > 0:
+            for t in tr:
+                if t > (runtime - 1.6):
+                    decode_params.append(int(t * 10) - int(runtime * 10 - 16))
+                    output_spike = False
+        if idx == 1:
+            if output_spike:
+                decode_params.append(0)
+            else:
+                output_spike = True
 
-
-print("DECODE PARAMS = {}".format(decode_params))
+print("Firing times in the output layer = {}".format(decode_params))
 SNN_result = decode(decode_params)
 print("RESULT = {}".format(SNN_result))
-p.end()
+sim.end()
 print("Simulation Finished!")
 
 
-def sigmoid(element):
-    return 1 / (1 + np.exp(-element))
+# def sigmoid(element):
+#     return 1 / (1 + np.exp(-element))
 
-
-input_values = [[0, 0], [0, 1], [1, 0], [1, 1]]
-for v in input_values:
-    computed_val = [0] * 16
-    for i in [0, 1]:
-        counting = 0
-        for j in range(0, 16):
-            counting += 1
-            weight = hf['dense']['dense']['kernel:0'][i][j]
-            bias = hf['dense']['dense']['bias:0'][j]
-            computed_val[j] += v[i] * weight + bias
-
-    ANN_result = 0
-    for (i, val) in enumerate(computed_val):
-        if val > 0:
-            ANN_result += val * hf['dense_1']['dense_1']['kernel:0'][i]
-
-    ANN_result += hf['dense_1']['dense_1']['bias:0'][0]
-
-    print("For input value: {}".format(v))
-    print("FINAL RESULT: {}".format(sigmoid(ANN_result)))
+#
+# input_values = [[0, 0], [0, 1], [1, 0], [1, 1]]
+# for v in input_values:
+#     computed_val = [0] * 16
+#     for i in [0, 1]:
+#         counting = 0
+#         for j in range(0, 16):
+#             counting += 1
+#             weight = hf['dense']['dense']['kernel:0'][i][j]
+#             bias = hf['dense']['dense']['bias:0'][j]
+#             computed_val[j] += v[i] * weight + bias
+#
+#     ANN_result = 0
+#     for (i, val) in enumerate(computed_val):
+#         if val > 0:
+#             ANN_result += val * hf['dense_1']['dense_1']['kernel:0'][i]
+#
+#     ANN_result += hf['dense_1']['dense_1']['bias:0'][0]
+#
+#     print("For input value: {}".format(v))
+#     print("FINAL RESULT: {}".format(sigmoid(ANN_result)))
