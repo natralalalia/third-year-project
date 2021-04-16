@@ -66,6 +66,8 @@ static void neuron_impl_store_neuron_parameters(
             n_neurons * sizeof(neuron_impl_t));
 }
 
+int weights[100];
+int index;
 __attribute__((unused)) // Marked unused as only used sometimes
 static void neuron_impl_add_inputs(
         index_t synapse_type_index, index_t neuron_index,
@@ -73,12 +75,24 @@ static void neuron_impl_add_inputs(
     // Get the neuron itself
     neuron_impl_t *neuron = &neuron_array[neuron_index];
 
-    if(weights_this_timestep != 0){
-        weights_this_timestep = 1;
+    if(synapse_type_index == 0) {
+        if(weights_this_timestep != 0) {
+            weights[index] = weights_this_timestep;
+            printf("POSITIVE Weights[%d] = %d == %d\n", index, weights[index], weights_this_timestep);
+            index++;
+        }
+    } else if(synapse_type_index == 1) {
+        if(weights_this_timestep != 0) {
+            weights[index] -= (int) weights_this_timestep;;
+            printf("NEGATIVE Weights[%d] = %d == %d\n", index, weights[index], 0-abs(weights_this_timestep));
+            index++;
+        }
     }
 
-    // Do something to store the inputs for the next state update
-    neuron->inputs[synapse_type_index] += weights_this_timestep;
+    if(weights_this_timestep != 0) {
+        // Do something to store the inputs for the next state update
+        neuron->inputs[synapse_type_index] += 1 ; // neutralise weights!
+    }
 }
 
 __attribute__((unused)) // Marked unused as only used sometimes
@@ -95,25 +109,15 @@ static uint32_t get_decode(index_t neuron_index){
 
 int activation_per_population[6];
 int initial_activation;
-int initial_activation_1;
-int initial_activation_2;
-uint32_t index;
-int weights[6];
 __attribute__((unused)) // Marked unused as only used sometimes
 static bool neuron_impl_do_timestep_update(
         index_t neuron_index, input_t external_bias, bool two_spikes, uint32_t time, int activation_1, int activation_2) {
     // Get the neuron itself
     neuron_impl_t *neuron = &neuron_array[neuron_index];
 
-    printf("NEURON INDEX  = %d \n\n\n", neuron_index);
     // Store the recorded membrane voltage
     neuron_recording_record_accum(V_RECORDING_INDEX, neuron_index, neuron->v);
 
-//    int layer = -1;
-//    if(neuron->decode == 0 || neuron->decode == 1) layer = 0;
-//    if(neuron->decode == 2 || neuron->decode == 3) layer = 1;
-//    if(neuron->decode == 4) layer = 2;
-//    printf("layer = %d \n\n", layer);
     int layer = (int) (neuron->decode) / 2;
     int pop = neuron->decode;
 
@@ -127,43 +131,24 @@ static bool neuron_impl_do_timestep_update(
     else if(neuron->decode == 4) bias = -60;
 
     initial_activation = activation_per_population[pop]; // neuron->activation;
-    initial_activation_2 = -1;
-    initial_activation_1 = -1;
-    int exc_weight = neuron->inputs[0];
-    printf("exc_weight = %d\n", exc_weight);
-    if(exc_weight != 0) {
-        weights[index] = exc_weight;
-        printf("Weights[%d]=%d", index, weights[index]);
-        index++;
-    }
-    int inh_weight = neuron->inputs[1];
-    printf("inh_weight = %d", inh_weight);
-    if(inh_weight != 0) {
-        weights[index] = inh_weight;
-        printf("Weights[%d]=%d", index, weights[index]);
-        index++;
-    }
-
-    if(neuron->inputs[0] != 0)
-        neuron->inputs[0] = 1;
-    if(neuron->inputs[1] != 0)
-        neuron->inputs[1] = 1;
-    if(external_bias != 0)
-        external_bias = 1;
 
     if(initial_activation == -1 && two_spikes == true) {
         // this means neuron needs decoding, i.e. it is in the hidden layers
         // and it has received two spikes, so my_activation() is the initial activation
-        initial_activation_1 = activation_1;
-        initial_activation_2 = activation_2;
 
-        printf("Initial activation 1 = %d \n Initial activation 2 = %d \n", initial_activation_1, initial_activation_2);
-        printf("Initial weight 1 = %d \n Initial weight 2 = %d \n Bias = %d\n", weights[layer * 2], weights[layer * 2 + 1], bias);
-        neuron->activation = initial_activation_1*weights[layer * 2] + initial_activation_2*weights[layer * 2 + 1] + bias;
+
+        printf("Initial activation 1 = %d\nInitial activation 2 = %d \n", activation_1, activation_2);
+        printf("Initial weight 1 = %d\nInitial weight 2 = %d\nBias = %d\n", weights[layer * 2], weights[layer * 2 + 1], bias);
+        int new_activation = activation_1*weights[layer * 2] + activation_2*weights[layer * 2 + 1] + bias;
+        neuron->activation = new_activation;
         initial_activation = neuron->activation;
         activation_per_population[pop] = neuron->activation;
 
         printf("NG+ NEW activation = %d\n", initial_activation);
+
+        if(initial_activation < 0) initial_activation = 0;
+        if(initial_activation > 255) initial_activation = 255;
+
         printf("NG+ Need to propagate this activation as encoded spikes to the next layer!\n");
     }
 
@@ -212,7 +197,6 @@ static bool neuron_impl_do_timestep_update(
           }
         }
     }
-
     neuron->v += external_bias + neuron->inputs[0] - neuron->inputs[1];
     neuron->inputs[0] = 0;
     neuron->inputs[1] = 0;
