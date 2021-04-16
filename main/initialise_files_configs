@@ -1,0 +1,79 @@
+
+    def get_data(self, parameters, state_variables, vertex_slice):
+        # TODO: get the data in the appropriate form to match the struct
+        values = [state_variables[EXC_INPUT],
+                  state_variables[INH_INPUT],
+                  state_variables[V],
+                  parameters[THRESHOLD],
+                  parameters["activation"],
+                  parameters["decode"],
+                  parameters["bias"],
+                  parameters["layer"]]
+        return self._struct.get_data(
+            values, vertex_slice.lo_atom, vertex_slice.n_atoms)
+
+
+
+
+
+    @property
+    def activation(self):
+        return self._activation
+
+    @activation.setter
+    def activation(self, activation):
+        self._activation = activation
+
+    @property
+    def decode(self):
+        return self._decode
+
+    @decode.setter
+    def decode(self, decode):
+        self._decode = decode
+
+    @property
+    def bias(self):
+        return self._bias
+
+    @bias.setter
+    def bias(self, bias):
+        self._bias = bias
+
+    @property
+    def layer(self):
+        return self._layer
+
+    @layer.setter
+    def layer(self, layer):
+        self._layer = layer
+        self._activation = activation
+        self._decode = decode
+        self._bias = bias
+        self._layer = layer
+
+        # TODO: Store a struct to make other operations easier
+            DataType.S1615,  # threshold
+            DataType.S1615,  # activation
+            DataType.S1615,  # decode
+            DataType.S1615,  # bias
+            DataType.S1615   # layer
+        ])
+        
+def __init__(self,
+
+                 # TODO: add model parameters and state variables
+                 threshold, v, exc_input, inh_input, activation, decode, bias, layer):
+                 
+                 
+                 from spynnaker.pyNN.models.neuron import AbstractPyNNNeuronModel
+from spynnaker.pyNN.models.defaults import default_parameters
+from python_models8.neuron.implementations.my_full_neuron_impl \
+    import MyFullNeuronImpl
+
+
+class MyFullNeuron(AbstractPyNNNeuronModel):
+    @default_parameters({"threshold"})
+    def __init__(self, threshold=0.0, v=0.0, exc_input=0.0, inh_input=0.0, activation=-1.0, decode=1.0, bias=0.0, layer=0):
+        AbstractPyNNNeuronModel.__init__(
+            self, MyFullNeuronImpl(threshold, v, exc_input, inh_input, activation, decode, bias, layer))
